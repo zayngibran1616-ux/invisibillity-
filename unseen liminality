@@ -1,0 +1,95 @@
+local Players = game:GetService("Players")
+local lp = Players.LocalPlayer
+
+-- Infinite Stamina
+local charSettings = require(game.ReplicatedStorage:FindFirstChild("CharacterSettings", true))
+charSettings.StaminaDrain = 0
+charSettings.StaminaMax = math.huge
+
+-- Build room -> position map from LevelChanger parts
+local roomPositions = {}
+local changers = workspace:FindFirstChild("Stuff"):FindFirstChild("LevelChangers")
+for _, v in ipairs(changers:GetChildren()) do
+    if v:IsA("BasePart") then
+        local name = v:GetAttribute("LevelName")
+        if name and not roomPositions[name] then
+            roomPositions[name] = v.Position + Vector3.new(0, 3, 0)
+        end
+    end
+end
+
+-- Teleport function
+local function teleportTo(roomName)
+    local pos = roomPositions[roomName]
+    if not pos then return end
+    local char = lp.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        hrp.CFrame = CFrame.new(pos)
+    end
+end
+
+-- GUI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "TeleportGUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = lp:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 200, 0, 400)
+frame.Position = UDim2.new(0, 10, 0.5, -200)
+frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+frame.BackgroundTransparency = 0.2
+frame.BorderSizePixel = 0
+frame.Parent = screenGui
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 8)
+UICorner.Parent = frame
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 30)
+title.BackgroundTransparency = 1
+title.Text = "Teleport Rooms"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.TextScaled = true
+title.Font = Enum.Font.GothamBold
+title.Parent = frame
+
+local scrolling = Instance.new("ScrollingFrame")
+scrolling.Size = UDim2.new(1, 0, 1, -35)
+scrolling.Position = UDim2.new(0, 0, 0, 35)
+scrolling.BackgroundTransparency = 1
+scrolling.ScrollBarThickness = 4
+scrolling.CanvasSize = UDim2.new(0, 0, 0, 0)
+scrolling.Parent = frame
+
+local rooms = {"Lobby","PoolRooms","Hotel","DreamCore","Pipedreams","Desolate Office","LiminalHome","EmptyLounge","Frutiger","Cheated","LevelSelector"}
+
+local y = 0
+for _, room in ipairs(rooms) do
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -10, 0, 35)
+    btn.Position = UDim2.new(0, 5, 0, y)
+    btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    btn.Text = room
+    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    btn.TextScaled = true
+    btn.Font = Enum.Font.Gotham
+    btn.BorderSizePixel = 0
+    btn.Parent = scrolling
+
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 6)
+    btnCorner.Parent = btn
+
+    btn.MouseButton1Click:Connect(function()
+        local level = lp:FindFirstChild("Level")
+        if level then level.Value = room end
+        teleportTo(room)
+    end)
+
+    y = y + 40
+    scrolling.CanvasSize = UDim2.new(0, 0, 0, y + 5)
+end
