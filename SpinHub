@@ -1,0 +1,104 @@
+local player = game.Players.LocalPlayer
+local spinning = false
+local spinTarget = nil
+local spinConnection = nil
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "SpinHub"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 220, 0, 300)
+frame.Position = UDim2.new(0, 10, 0.5, -150)
+frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+frame.BorderColor3 = Color3.fromRGB(80, 80, 80)
+frame.Active = true
+frame.Parent = screenGui
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 30)
+title.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+title.Text = "Teleport & Spin"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.TextScaled = true
+title.Font = Enum.Font.GothamBold
+title.Parent = frame
+
+local scrolling = Instance.new("ScrollingFrame")
+scrolling.Size = UDim2.new(1, 0, 1, -60)
+scrolling.Position = UDim2.new(0, 0, 0, 30)
+scrolling.BackgroundTransparency = 1
+scrolling.CanvasSize = UDim2.new(0, 0, 0, 0)
+scrolling.ScrollBarThickness = 4
+scrolling.Parent = frame
+
+local stopBtn = Instance.new("TextButton")
+stopBtn.Size = UDim2.new(1, 0, 0, 28)
+stopBtn.Position = UDim2.new(0, 0, 1, -28)
+stopBtn.BackgroundColor3 = Color3.fromRGB(80, 0, 0)
+stopBtn.BorderColor3 = Color3.fromRGB(100, 100, 100)
+stopBtn.Text = "Stop Spin"
+stopBtn.TextColor3 = Color3.new(1, 1, 1)
+stopBtn.TextScaled = true
+stopBtn.Font = Enum.Font.GothamBold
+stopBtn.Parent = frame
+
+local function refreshList()
+    for _, v in scrolling:GetChildren() do if v:IsA("TextButton") then v:Destroy() end end
+    local y = 0
+    for _, plr in game.Players:GetPlayers() do
+        if plr == player then continue end
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -10, 0, 30)
+        btn.Position = UDim2.new(0, 5, 0, y)
+        btn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+        btn.Text = plr.Name
+        btn.TextColor3 = Color3.new(1, 1, 1)
+        btn.TextScaled = true
+        btn.Font = Enum.Font.GothamBold
+        btn.Parent = scrolling
+        btn.MouseButton1Click:Connect(function()
+            local c = plr.Character
+            if not c or not c:FindFirstChild("HumanoidRootPart") then return end
+            local myChar = player.Character
+            if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
+            myChar.HumanoidRootPart.CFrame = c.HumanoidRootPart.CFrame * CFrame.new(0, 0, 5)
+            if spinConnection then spinConnection:Disconnect(); spinConnection = nil end
+            spinning = true
+            spinTarget = plr
+            local angle = 0
+            spinConnection = game:GetService("RunService").RenderStepped:Connect(function()
+                if not spinning or not spinTarget then
+                    if spinConnection then spinConnection:Disconnect(); spinConnection = nil end
+                    return
+                end
+                local tChar = spinTarget.Character
+                if not tChar or not tChar:FindFirstChild("HumanoidRootPart") then
+                    if spinConnection then spinConnection:Disconnect(); spinConnection = nil end
+                    spinning = false; return
+                end
+                local myChar = player.Character
+                if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
+                angle = angle + 0.03
+                local radius = 5
+                local x = math.cos(angle) * radius
+                local z = math.sin(angle) * radius
+                local targetPos = tChar.HumanoidRootPart.Position
+                myChar.HumanoidRootPart.CFrame = CFrame.new(targetPos + Vector3.new(x, 0, z), targetPos)
+            end)
+        end)
+        y = y + 32
+    end
+    scrolling.CanvasSize = UDim2.new(0, 0, 0, y)
+end
+
+stopBtn.MouseButton1Click:Connect(function()
+    spinning = false
+    spinTarget = nil
+    if spinConnection then spinConnection:Disconnect(); spinConnection = nil end
+end)
+
+game.Players.PlayerAdded:Connect(refreshList)
+game.Players.PlayerRemoving:Connect(refreshList)
+refreshList()
