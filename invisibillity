@@ -1,46 +1,118 @@
 local player = game.Players.LocalPlayer
-local invisible = false
+local uis = game:GetService("UserInputService")
 
+-- State
+local invisible = false
+local espEnabled = false
+local espObjects = {}
+
+-- GUI
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "InvisGUI"
+screenGui.Name = "ScriptHub"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
-local button = Instance.new("TextButton")
-button.Size = UDim2.new(0, 150, 0, 40)
-button.Position = UDim2.new(0.5, -75, 0, 10)
-button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-button.BorderColor3 = Color3.fromRGB(100, 100, 100)
-button.Text = "Invisibility: OFF"
-button.TextColor3 = Color3.new(1, 1, 1)
-button.TextScaled = true
-button.Font = Enum.Font.GothamBold
-button.Parent = screenGui
-
-local function toggle()
-    invisible = not invisible
-    local c = player.Character
-    if not c then return end
-    for _, v in c:GetDescendants() do
-        if v:IsA("BasePart") then v.Transparency = invisible and 1 or 0 end
-        if v:IsA("Decal") or v:IsA("Face") then v.Transparency = invisible and 1 or 0 end
-    end
-    pcall(function()
-        local h = c:FindFirstChild("Head")
-        if h then
-            local tag = h:FindFirstChild("BillboardGui")
-            if tag then tag.Enabled = not invisible end
-        end
-    end)
-    button.Text = invisible and "Invisibility: ON" or "Invisibility: OFF"
-    button.BackgroundColor3 = invisible and Color3.fromRGB(0, 80, 0) or Color3.fromRGB(30, 30, 30)
+local function makeButton(name, posY, colorOff, colorOn)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 160, 0, 35)
+    btn.Position = UDim2.new(0.5, -80, 0, posY)
+    btn.BackgroundColor3 = colorOff
+    btn.BorderColor3 = Color3.fromRGB(100, 100, 100)
+    btn.Text = name .. ": OFF"
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.TextScaled = true
+    btn.Font = Enum.Font.GothamBold
+    btn.Parent = screenGui
+    return btn, colorOff, colorOn
 end
 
-button.MouseButton1Click:Connect(toggle)
+-- Invisibility
+local invBtn, invOff, invOn = makeButton("Invisibility", 10, Color3.fromRGB(30, 30, 30), Color3.fromRGB(0, 80, 0))
+invBtn.MouseButton1Click:Connect(function()
+    invisible = not invisible
+    local c = player.Character
+    if c then
+        for _, v in c:GetDescendants() do
+            if v:IsA("BasePart") then v.Transparency = invisible and 1 or 0 end
+            if v:IsA("Decal") or v:IsA("Face") then v.Transparency = invisible and 1 or 0 end
+        end
+        pcall(function()
+            local h = c:FindFirstChild("Head")
+            if h then
+                local tag = h:FindFirstChild("BillboardGui")
+                if tag then tag.Enabled = not invisible end
+            end
+        end)
+    end
+    invBtn.Text = invisible and "Invisibility: ON" or "Invisibility: OFF"
+    invBtn.BackgroundColor3 = invisible and invOn or invOff
+end)
+
+-- ESP
+local function createESP(plr)
+    if plr == player then return end
+    local c = plr.Character
+    if not c or not c:FindFirstChild("Head") then return end
+    local bb = Instance.new("BillboardGui")
+    bb.Name, bb.Adornee, bb.Size = "ESP_" .. plr.Name, c.Head, UDim2.new(0, 200, 0, 50)
+    bb.StudsOffset, bb.AlwaysOnTop, bb.ResetOnSpawn = Vector3.new(0, 3, 0), true, false
+    local nl = Instance.new("TextLabel")
+    nl.Size, nl.BackgroundTransparency, nl.Text = UDim2.new(1, 0, 0.5, 0), 1, plr.Name
+    nl.TextColor3, nl.TextScaled, nl.Font, nl.TextStrokeTransparency = plr.TeamColor.Color, true, Enum.Font.GothamBold, 0.3
+    nl.Parent = bb
+    local dl = Instance.new("TextLabel")
+    dl.Size, dl.Position, dl.BackgroundTransparency = UDim2.new(1, 0, 0.5, 0), UDim2.new(0, 0, 0.5, 0), 1
+    dl.Text, dl.TextColor3, dl.TextScaled, dl.Font, dl.TextStrokeTransparency = "0m", Color3.new(1, 1, 1), true, Enum.Font.GothamBold, 0.3
+    dl.Parent = bb
+    bb.Parent = c.Head
+    espObjects[plr] = {bb = bb, dl = dl}
+end
+
+local espBtn, espOff, espOn = makeButton("ESP", 55, Color3.fromRGB(30, 30, 30), Color3.fromRGB(0, 80, 0))
+espBtn.MouseButton1Click:Connect(function()
+    espEnabled = not espEnabled
+    if espEnabled then
+        for _, plr in game.Players:GetPlayers() do createESP(plr) end
+        coroutine.wrap(function()
+            while espEnabled do
+                local char, root = player.Character, nil
+                if char then root = char:FindFirstChild("HumanoidRootPart") end
+                for plr, objs in espObjects do
+                    local c = plr.Character
+                    if c and c:FindFirstChild("Head") and root then
+                        objs.dl.Text = math.floor((c.Head.Position - root.Position).Magnitude) .. "m"
+                    end
+                end
+                task.wait(0.1)
+            end
+        end)()
+    else
+        for plr in pairs(espObjects) do
+            if espObjects[plr] and espObjects[plr].bb then espObjects[plr].bb:Destroy() end
+        end
+        espObjects = {}
+    end
+    espBtn.Text = espEnabled and "ESP: ON" or "ESP: OFF"
+    espBtn.BackgroundColor3 = espEnabled and espOn or espOff
+end)
+
+game.Players.PlayerAdded:Connect(function(plr)
+    plr.CharacterAdded:Connect(function()
+        if espEnabled then task.wait(0.5); createESP(plr) end
+    end)
+end)
+game.Players.PlayerRemoving:Connect(function(plr)
+    if espObjects[plr] and espObjects[plr].bb then pcall(espObjects[plr].bb.Destroy, espObjects[plr].bb); espObjects[plr] = nil end
+end)
 
 player.CharacterAdded:Connect(function(c)
     if invisible then
         c:WaitForChild("HumanoidRootPart")
-        task.wait(0.5); toggle(); toggle()
+        task.wait(0.5); invisible = not invisible
+        for _, v in c:GetDescendants() do
+            if v:IsA("BasePart") then v.Transparency = 1 end
+            if v:IsA("Decal") or v:IsA("Face") then v.Transparency = 1 end
+        end
+        invisible = true
     end
 end)
