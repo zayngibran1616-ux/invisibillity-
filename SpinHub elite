@@ -1,0 +1,194 @@
+local player = game.Players.LocalPlayer
+local camera = workspace.CurrentCamera
+local run = game:GetService("RunService")
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "SpinHub"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 200, 0, 200)
+frame.Position = UDim2.new(0.5, -100, 0.5, -100)
+frame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+frame.BackgroundTransparency = 0.2
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
+frame.Parent = gui
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 30)
+title.BackgroundTransparency = 1
+title.Text = "🌀 SpinHub"
+title.TextColor3 = Color3.fromRGB(100, 200, 255)
+title.TextScaled = true
+title.Font = Enum.Font.GothamBold
+title.Parent = frame
+
+local status = Instance.new("TextLabel")
+status.Size = UDim2.new(1, 0, 0, 18)
+status.Position = UDim2.new(0, 0, 0, 30)
+status.BackgroundTransparency = 1
+status.Text = "Target: none"
+status.TextColor3 = Color3.fromRGB(200, 200, 200)
+status.TextScaled = true
+status.Font = Enum.Font.Gotham
+status.Parent = frame
+
+local box = Instance.new("TextBox")
+box.Size = UDim2.new(1, -20, 0, 28)
+box.Position = UDim2.new(0, 10, 0, 52)
+box.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+box.BorderSizePixel = 0
+box.Text = "Display Name"
+box.TextColor3 = Color3.fromRGB(180, 180, 180)
+box.TextScaled = true
+box.Font = Enum.Font.Gotham
+box.PlaceholderText = "Display Name"
+box.Parent = frame
+Instance.new("UICorner", box).CornerRadius = UDim.new(0, 4)
+
+box.FocusLost:Connect(function()
+	if box.Text == "" or box.Text == "Display Name" then
+		box.Text = "Display Name"
+	end
+end)
+
+local toggle = Instance.new("TextButton")
+toggle.Size = UDim2.new(1, -20, 0, 35)
+toggle.Position = UDim2.new(0, 10, 0, 88)
+toggle.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+toggle.BorderSizePixel = 0
+toggle.Text = "Spin [OFF]"
+toggle.TextColor3 = Color3.new(1, 1, 1)
+toggle.TextScaled = true
+toggle.Font = Enum.Font.GothamBold
+toggle.Parent = frame
+Instance.new("UICorner", toggle).CornerRadius = UDim.new(0, 6)
+
+local nearestBtn = Instance.new("TextButton")
+nearestBtn.Size = UDim2.new(1, -20, 0, 25)
+nearestBtn.Position = UDim2.new(0, 10, 0, 128)
+nearestBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+nearestBtn.BorderSizePixel = 0
+nearestBtn.Text = "Nearest Player"
+nearestBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+nearestBtn.TextScaled = true
+nearestBtn.Font = Enum.Font.Gotham
+nearestBtn.Parent = frame
+Instance.new("UICorner", nearestBtn).CornerRadius = UDim.new(0, 4)
+
+local distLabel = Instance.new("TextLabel")
+distLabel.Size = UDim2.new(1, -20, 0, 18)
+distLabel.Position = UDim2.new(0, 10, 0, 158)
+distLabel.BackgroundTransparency = 1
+distLabel.Text = "Dist: 5"
+distLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+distLabel.TextScaled = true
+distLabel.Font = Enum.Font.Gotham
+distLabel.Parent = frame
+
+local spinning = false
+local angle = 0
+local orbitDist = 5
+local targetPlayer = nil
+local useNearest = true
+
+toggle.MouseButton1Click:Connect(function()
+	spinning = not spinning
+	toggle.BackgroundColor3 = spinning and Color3.fromRGB(50, 180, 50) or Color3.fromRGB(60, 60, 60)
+	toggle.Text = spinning and "Spin [ON]" or "Spin [OFF]"
+	if not spinning then
+		status.Text = "Target: none"
+	end
+end)
+
+nearestBtn.MouseButton1Click:Connect(function()
+	useNearest = true
+	targetPlayer = nil
+	status.Text = "Target: nearest"
+end)
+
+local function findDisplayName(name)
+	local lower = name:lower()
+	for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
+		if p ~= player then
+			if p.DisplayName:lower():find(lower) or p.Name:lower():find(lower) then
+				return p
+			end
+		end
+	end
+	return nil
+end
+
+box.FocusLost:Connect(function(enter)
+	if enter and box.Text ~= "" and box.Text ~= "Display Name" then
+		local found = findDisplayName(box.Text)
+		if found then
+			targetPlayer = found
+			useNearest = false
+			status.Text = "Target: " .. found.DisplayName
+		else
+			status.Text = "Player not found!"
+		end
+	end
+end)
+
+run.RenderStepped:Connect(function()
+	if not spinning then return end
+	
+	local target
+	if useNearest or not targetPlayer then
+		local nearest, nearestDist = nil, math.huge
+		for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
+			if p ~= player then
+				local char = p.Character
+				local root = char and char:FindFirstChild("HumanoidRootPart")
+				if root then
+					local myRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+					local origin = myRoot and myRoot.Position or camera.CFrame.Position
+					local dist = (root.Position - origin).Magnitude
+					if dist < nearestDist then
+						nearest = p
+						nearestDist = dist
+					end
+				end
+			end
+		end
+		target = nearest
+	else
+		target = targetPlayer
+	end
+	
+	if not target then
+		status.Text = "Target: none"
+		return
+	end
+	
+	local targetRoot = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+	if not targetRoot then
+		status.Text = "Target: no root"
+		return
+	end
+	
+	local myRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not myRoot then return end
+	
+	local dist = (targetRoot.Position - myRoot.Position).Magnitude
+	status.Text = "Target: " .. target.DisplayName .. " (" .. math.floor(dist) .. ")"
+	
+	angle = angle + 0.03
+	
+	local x = math.cos(angle) * orbitDist
+	local z = math.sin(angle) * orbitDist
+	local targetPos = targetRoot.Position
+	
+	myRoot.CFrame = CFrame.new(
+		targetPos.X + x,
+		targetPos.Y,
+		targetPos.Z + z
+	)
+	myRoot.CFrame = CFrame.lookAt(myRoot.Position, targetPos)
+end)
