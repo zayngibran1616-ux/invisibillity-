@@ -1,0 +1,245 @@
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+
+local lp = Players.LocalPlayer
+if not lp then return end
+
+-- GUI
+local gui = Instance.new("ScreenGui")
+gui.Name = "AutoFarmGui"
+gui.ResetOnSpawn = false
+gui.Parent = lp:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame")
+frame.Name = "MainFrame"
+frame.Size = UDim2.new(0, 200, 0, 60)
+frame.Position = UDim2.new(0, 15, 0, 120)
+frame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+frame.BackgroundTransparency = 0.2
+frame.BorderSizePixel = 0
+frame.Parent = gui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 8)
+corner.Parent = frame
+
+local stroke = Instance.new("UIStroke")
+stroke.Thickness = 1.5
+stroke.Color = Color3.fromRGB(60, 60, 80)
+stroke.Parent = frame
+
+local btn = Instance.new("TextButton")
+btn.Name = "ToggleBtn"
+btn.Size = UDim2.new(0, 180, 0, 36)
+btn.Position = UDim2.new(0.5, -90, 0.5, -18)
+btn.BackgroundColor3 = Color3.fromRGB(35, 120, 60)
+btn.BackgroundTransparency = 0.15
+btn.BorderSizePixel = 0
+btn.Text = "AUTOFARM ON"
+btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+btn.TextSize = 16
+btn.Font = Enum.Font.GothamBold
+btn.Parent = frame
+
+local btnCorner = Instance.new("UICorner")
+btnCorner.CornerRadius = UDim.new(0, 6)
+btnCorner.Parent = btn
+
+local statusText = Instance.new("TextLabel")
+statusText.Name = "Status"
+statusText.Size = UDim2.new(0, 180, 0, 16)
+statusText.Position = UDim2.new(0.5, -90, 0, 6)
+statusText.BackgroundTransparency = 1
+statusText.Text = "Round: waiting..."
+statusText.TextColor3 = Color3.fromRGB(160, 160, 180)
+statusText.TextSize = 11
+statusText.Font = Enum.Font.Gotham
+statusText.Parent = frame
+
+-- Core
+local SAFE = CFrame.new(-9.69, 291.64, 184.15)
+local enabled = false
+local running = false
+local noclipOn = false
+
+local function setBtn(on)
+	btn.Text = on and "AUTOFARM ON" or "AUTOFARM OFF"
+	if on then
+		btn.BackgroundColor3 = Color3.fromRGB(35, 120, 60)
+	else
+		btn.BackgroundColor3 = Color3.fromRGB(100, 40, 40)
+	end
+end
+
+local function setStatus(t)
+	statusText.Text = t
+end
+
+local function root()
+	local ok, char = pcall(function() return lp.Character end)
+	if not ok or not char then return nil end
+	local ok2, r = pcall(function() return char:FindFirstChild("HumanoidRootPart") end)
+	if not ok2 or not r then return nil end
+	return r
+end
+
+local function tp(cf)
+	pcall(function()
+		local r = root()
+		if r then r.CFrame = cf end
+	end)
+end
+
+local function active()
+	local da = ReplicatedStorage:FindFirstChild("DisasterActive")
+	return da and da.Value == true
+end
+
+local function noclip(state)
+	noclipOn = state
+	pcall(function()
+		local char = lp.Character
+		if not char then return end
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if not hum then return end
+		if state then
+			hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+			hum:SetStateEnabled(Enum.HumanoidStateType.GettingUp, false)
+			for _, p in ipairs(char:GetDescendants()) do
+				if p:IsA("BasePart") then
+					p.CanCollide = false
+				end
+			end
+		else
+			hum:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
+			hum:SetStateEnabled(Enum.HumanoidStateType.GettingUp, true)
+		end
+	end)
+end
+
+task.spawn(function()
+	while true do
+		if noclipOn then
+			pcall(function()
+				local char = lp.Character
+				if not char then return end
+				for _, p in ipairs(char:GetDescendants()) do
+					if p:IsA("BasePart") then
+						p.CanCollide = false
+					end
+				end
+			end)
+		end
+		task.wait(0.1)
+	end
+end)
+
+local function collect()
+	local visited = {}
+	noclip(true)
+	setStatus("Collecting beacons...")
+	while enabled and active() do
+		pcall(function()
+			local folder = workspace:FindFirstChild("ClockRemnants")
+			if not folder then return end
+			for _, m in ipairs(folder:GetChildren()) do
+				if not enabled or not active() then break end
+				if m:IsA("Model") and m:GetAttribute("IsClockRemnant") == true then
+					local key = tostring(m)
+					if not visited[key] then
+						local n = m.Name:lower()
+						if n:find("unactivated") or (not n:find("activated") and not n:find("idle")) then
+							local impact = m:FindFirstChild("ImpactEffect")
+							if impact and impact:IsA("BasePart") then
+								tp(CFrame.new(impact.Position))
+								task.wait(0.5)
+								visited[key] = true
+							end
+						end
+					end
+				end
+			end
+		end)
+		tp(SAFE)
+		task.wait(3)
+	end
+	noclip(false)
+	setStatus("Round: surviving...")
+end
+
+task.spawn(function()
+	while true do
+		if enabled and active() then
+			if not running then
+				running = true
+				setStatus("Round active - collecting")
+				task.wait(5)
+				collect()
+				running = false
+				setStatus("Waiting for next round...")
+			end
+		elseif not active() then
+			running = false
+			noclip(false)
+			pcall(function()
+				local s = ReplicatedStorage:FindFirstChild("Status")
+				if s and tostring(s.Value):find("Intermission") then
+					tp(SAFE)
+					setStatus("Intermission")
+				end
+			end)
+		end
+		task.wait(1)
+	end
+end)
+
+lp.CharacterAdded:Connect(function()
+	task.wait(1.5)
+	if enabled and active() then
+		tp(SAFE)
+		setStatus("Rejoined - collecting")
+	end
+end)
+
+local bs = ReplicatedStorage:FindFirstChild("CR_BeaconSpawned")
+if bs then
+	bs.OnClientEvent:Connect(function()
+		if enabled and active() then
+			task.spawn(function()
+				task.wait(1.5)
+				collect()
+			end)
+		end
+	end)
+end
+
+local aa = ReplicatedStorage:FindFirstChild("CR_AllBeaconsActivated")
+if aa then
+	aa.OnClientEvent:Connect(function()
+		tp(SAFE)
+		running = false
+		setStatus("All beacons done")
+	end)
+end
+
+btn.MouseButton1Click:Connect(function()
+	enabled = not enabled
+	setBtn(enabled)
+	if enabled then
+		setStatus("Enabled - waiting for round...")
+		if active() then
+			task.spawn(function()
+				task.wait(2)
+				collect()
+			end)
+		end
+	else
+		running = false
+		noclip(false)
+		setStatus("Disabled")
+	end
+end)
+
+setBtn(false)
+setStatus("Click to enable")
