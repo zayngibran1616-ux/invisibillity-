@@ -13,7 +13,7 @@ gui.Parent = lp:WaitForChild("PlayerGui")
 
 local frame = Instance.new("Frame")
 frame.Name = "MainFrame"
-frame.Size = UDim2.new(0, 200, 0, 60)
+frame.Size = UDim2.new(0, 200, 0, 90)
 frame.Position = UDim2.new(0, 15, 0, 120)
 frame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 frame.BackgroundTransparency = 0.2
@@ -57,11 +57,30 @@ statusText.TextSize = 11
 statusText.Font = Enum.Font.Gotham
 statusText.Parent = frame
 
+local modeBtn = Instance.new("TextButton")
+modeBtn.Name = "ModeBtn"
+modeBtn.Size = UDim2.new(0, 86, 0, 22)
+modeBtn.Position = UDim2.new(0.5, -90, 0, 64)
+modeBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+modeBtn.BackgroundTransparency = 0.2
+modeBtn.BorderSizePixel = 0
+modeBtn.Text = "SKY"
+modeBtn.TextColor3 = Color3.fromRGB(180, 180, 220)
+modeBtn.TextSize = 11
+modeBtn.Font = Enum.Font.GothamBold
+modeBtn.Parent = frame
+
+local modeCorner = Instance.new("UICorner")
+modeCorner.CornerRadius = UDim.new(0, 4)
+modeCorner.Parent = modeBtn
+
 -- Core
-local SAFE = CFrame.new(-9.69, 291.64, 184.15)
+local SKY = CFrame.new(-9.69, 600, 184.15)
+local LOBBY = CFrame.new(-9.69, 291.64, 184.15)
+local LOW_HP = 35
+local SAFE_HP = 60
+local skyMode = true
 local enabled = false
-local running = false
-local noclipOn = false
 
 local function setBtn(on)
 	btn.Text = on and "AUTOFARM ON" or "AUTOFARM OFF"
@@ -70,6 +89,15 @@ local function setBtn(on)
 	else
 		btn.BackgroundColor3 = Color3.fromRGB(100, 40, 40)
 	end
+end
+
+local function setModeBtn()
+	modeBtn.Text = skyMode and "SKY" or "LOBBY"
+	modeBtn.BackgroundColor3 = skyMode and Color3.fromRGB(30, 30, 80) or Color3.fromRGB(50, 40, 20)
+end
+
+local function safe()
+	return skyMode and SKY or LOBBY
 end
 
 local function setStatus(t)
@@ -96,14 +124,22 @@ local function active()
 	return da and da.Value == true
 end
 
-local function noclip(state)
-	noclipOn = state
-	pcall(function()
-		local char = lp.Character
-		if not char then return end
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		if not hum then return end
-		if state then
+local function hp()
+	local ok, char = pcall(function() return lp.Character end)
+	if not ok or not char then return 100 end
+	local ok2, hum = pcall(function() return char:FindFirstChildOfClass("Humanoid") end)
+	if not ok2 or not hum then return 100 end
+	return hum.Health
+end
+
+-- Noclip always on
+task.spawn(function()
+	while true do
+		pcall(function()
+			local char = lp.Character
+			if not char then return end
+			local hum = char:FindFirstChildOfClass("Humanoid")
+			if not hum then return end
 			hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
 			hum:SetStateEnabled(Enum.HumanoidStateType.GettingUp, false)
 			for _, p in ipairs(char:GetDescendants()) do
@@ -111,84 +147,81 @@ local function noclip(state)
 					p.CanCollide = false
 				end
 			end
-		else
-			hum:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
-			hum:SetStateEnabled(Enum.HumanoidStateType.GettingUp, true)
-		end
-	end)
-end
-
-task.spawn(function()
-	while true do
-		if noclipOn then
-			pcall(function()
-				local char = lp.Character
-				if not char then return end
-				for _, p in ipairs(char:GetDescendants()) do
-					if p:IsA("BasePart") then
-						p.CanCollide = false
-					end
-				end
-			end)
-		end
+		end)
 		task.wait(0.1)
 	end
 end)
 
 local function collect()
-	local visited = {}
-	noclip(true)
+	local h = hp()
+	if h <= LOW_HP then
+		tp(SKY)
+		setStatus("HP low (" .. math.floor(h) .. ") - hiding")
+		return
+	end
 	setStatus("Collecting beacons...")
 	while enabled and active() do
+		if hp() <= LOW_HP then
+			tp(SKY)
+			setStatus("HP low (" .. math.floor(hp()) .. ") - hid in sky")
+			break
+		end
 		pcall(function()
 			local folder = workspace:FindFirstChild("ClockRemnants")
 			if not folder then return end
 			for _, m in ipairs(folder:GetChildren()) do
 				if not enabled or not active() then break end
+				if hp() <= LOW_HP then break end
 				if m:IsA("Model") and m:GetAttribute("IsClockRemnant") == true then
-					local key = tostring(m)
-					if not visited[key] then
-						local n = m.Name:lower()
-						if n:find("unactivated") or (not n:find("activated") and not n:find("idle")) then
-							local impact = m:FindFirstChild("ImpactEffect")
-							if impact and impact:IsA("BasePart") then
-								tp(CFrame.new(impact.Position))
-								task.wait(0.5)
-								visited[key] = true
+					local n = m.Name:lower()
+					if n:find("unactivated") or (not n:find("activated") and not n:find("idle")) then
+						local parts = {m:FindFirstChild("ImpactEffect"), m:FindFirstChild("Ray1"), m:FindFirstChild("Ray2")}
+						for _, p in ipairs(parts) do
+							if p and p:IsA("BasePart") then
+								tp(CFrame.new(p.Position))
+								task.wait(0.15)
 							end
+						end
+						local cframe, size = m:GetBoundingBox()
+						if cframe then
+							tp(cframe)
+							task.wait(0.15)
 						end
 					end
 				end
 			end
+			for _, c in ipairs(folder:GetChildren()) do
+				if c:IsA("BasePart") and c.Name:lower():find("hitbox") then
+					tp(CFrame.new(c.Position))
+					task.wait(0.15)
+				end
+			end
 		end)
-		tp(SAFE)
-		task.wait(3)
+		tp(SKY)
+		task.wait(2)
 	end
-	noclip(false)
 	setStatus("Round: surviving...")
 end
 
 task.spawn(function()
 	while true do
 		if enabled and active() then
-			if not running then
-				running = true
-				setStatus("Round active - collecting")
-				task.wait(5)
+			if hp() >= SAFE_HP then
 				collect()
-				running = false
-				setStatus("Waiting for next round...")
+			else
+				tp(SKY)
+				setStatus("HP too low (" .. math.floor(hp()) .. ") - waiting")
+				task.wait(2)
 			end
-		elseif not active() then
-			running = false
-			noclip(false)
+		else
 			pcall(function()
 				local s = ReplicatedStorage:FindFirstChild("Status")
 				if s and tostring(s.Value):find("Intermission") then
-					tp(SAFE)
+					tp(safe())
 					setStatus("Intermission")
 				end
 			end)
+			setStatus("Waiting for round...")
 		end
 		task.wait(1)
 	end
@@ -197,7 +230,7 @@ end)
 lp.CharacterAdded:Connect(function()
 	task.wait(1.5)
 	if enabled and active() then
-		tp(SAFE)
+		tp(safe())
 		setStatus("Rejoined - collecting")
 	end
 end)
@@ -206,10 +239,7 @@ local bs = ReplicatedStorage:FindFirstChild("CR_BeaconSpawned")
 if bs then
 	bs.OnClientEvent:Connect(function()
 		if enabled and active() then
-			task.spawn(function()
-				task.wait(1.5)
-				collect()
-			end)
+			task.spawn(collect)
 		end
 	end)
 end
@@ -217,8 +247,7 @@ end
 local aa = ReplicatedStorage:FindFirstChild("CR_AllBeaconsActivated")
 if aa then
 	aa.OnClientEvent:Connect(function()
-		tp(SAFE)
-		running = false
+		tp(safe())
 		setStatus("All beacons done")
 	end)
 end
@@ -235,11 +264,16 @@ btn.MouseButton1Click:Connect(function()
 			end)
 		end
 	else
-		running = false
-		noclip(false)
 		setStatus("Disabled")
 	end
 end)
 
+modeBtn.MouseButton1Click:Connect(function()
+	skyMode = not skyMode
+	setModeBtn()
+	tp(safe())
+end)
+
 setBtn(false)
+setModeBtn()
 setStatus("Click to enable")
